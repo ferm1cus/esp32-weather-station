@@ -1,3 +1,4 @@
+#include "secrets.h" // wifi credentials
 #include <Wire.h>
 #include <WiFi.h>
 #include <time.h>
@@ -7,8 +8,9 @@
 
 Adafruit_BMP085 bmp;
 
-const char* ssid = "Wokwi-GUEST";
-const char* password = "";
+const char* ntpServer = "pool.ntp.org";
+const long gmtOffset_sec = 0; // keep UTC convert to IST in front-end
+const int daylightOffset_sec = 0;
 
 void initWifi() {
   WiFi.mode(WIFI_STA);
@@ -21,13 +23,42 @@ void initWifi() {
   Serial.println(WiFi.localIP());
 }
 
+void initTime() {
+  struct tm timeinfo;
+
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
+
+  Serial.println("Synchronizing time...");
+
+  while (!getLocalTime(&timeinfo)) {
+    Serial.println("Waiting for NTP time...");
+    delay(1000);
+  }
+
+  Serial.println("Time synchornized.");
+}
+
+String getTimeStamp() {
+  struct tm timeinfo;
+
+  if (!getLocalTime(&timeinfo)) {
+    Serial.println("Failed to obtain time.");
+    return "";
+  }
+
+  char timestamp[25];
+
+  strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
+
+  return String(timestamp);
+}
+
 void sendJson(float temp, float pressure) {
   JsonDocument doc;
 
+  doc["timestamp"] = getTimeStamp(); // TODO: reject empty timestamps
   doc["temperature"] = temp;
   doc["pressure"] = pressure / 100; // hPa
-
-  // TODO: Add timestamp
 
   serializeJson(doc, Serial); // debug
   Serial.println();
@@ -48,6 +79,7 @@ void setup() {
   }
 
   initWifi();
+  initTime();
 }
 
 void loop() {
